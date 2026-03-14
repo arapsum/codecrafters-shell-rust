@@ -14,6 +14,7 @@ fn main() {
         let command = input.trim();
 
         match command {
+            "exit" => return,
             _ => {
                 eprintln!("{command}: command not found");
             }
