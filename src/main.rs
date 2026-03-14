@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::{
     borrow::Cow,
     path::{Path, PathBuf},
+    str::SplitWhitespace,
 };
 
 const BUILTINS: &[&str] = &["exit", "echo", "type"];
@@ -27,16 +28,23 @@ fn main() {
             }
             Some(Command::Type(file)) => println!("{file}"),
             Some(Command::NotFound(err)) => eprintln!("{err}"),
-            _ => eprintln!(
-                "{} not found",
-                input
-                    .trim()
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .first()
-                    .copied()
-                    .unwrap_or_default()
-            ),
+            Some(Command::Programme(_, name, args)) => {
+                match std::process::Command::new(name.to_string())
+                    .args(args)
+                    .spawn()
+                {
+                    Ok(mut child) => {
+                        let _ = child.wait();
+                    }
+                    Err(e) => eprintln!("{e}"),
+                }
+            }
+            _ => {
+                let mut parts = input.trim().split_whitespace();
+                let name = parts.next().unwrap();
+
+                eprintln!("{name} not found",);
+            }
         }
     }
 }
@@ -45,7 +53,7 @@ pub enum Command<'a> {
     Exit(Option<Cow<'a, str>>),
     Echo(Cow<'a, str>),
     Type(Cow<'a, str>),
-    Programme(PathBuf, Cow<'a, str>, Vec<Cow<'a, str>>),
+    Programme(PathBuf, Cow<'a, str>, SplitWhitespace<'a>),
     NotFound(String),
 }
 
@@ -79,20 +87,17 @@ fn parse_command(input: &str) -> Option<Command<'_>> {
                 Some(Command::NotFound(format!("{file}: not found")))
             }
         }
-        _ => Some(Command::NotFound(format!("{command}: not found"))), // _ => {
-                                                                       //     let args = args.collect::<Vec<&str>>();
-                                                                       //     let name = args[0];
-                                                                       //     let programme_args = args[1..]
-                                                                       //         .to_vec()
-                                                                       //         .into_iter()
-                                                                       //         .map(|t| Cow::Owned(t.to_string()))
-                                                                       //         .collect::<Vec<Cow<'_, str>>>();
-                                                                       //     Some(Command::Programme(
-                                                                       //         PathBuf::from(name),
-                                                                       //         Cow::Owned(command.to_string()),
-                                                                       //         programme_args,
-                                                                       //     ))
-                                                                       // }
+        _ => {
+            if let Some(exe) = find_executable(command) {
+                Some(Command::Programme(
+                    exe,
+                    Cow::Owned(command.to_string()),
+                    args,
+                ))
+            } else {
+                Some(Command::NotFound(format!("{command}: not found")))
+            }
+        }
     }
 }
 
