@@ -67,7 +67,7 @@ fn parse_command(input: &str) -> Option<Command<'_>> {
             let file = args.collect::<Vec<&str>>().get(0).copied().unwrap();
             if is_builtin(file) {
                 Some(Command::Type(Cow::Owned(format!(
-                    "{} is a builtin command",
+                    "{} is a shell builtin",
                     file
                 ))))
             } else if let Some(exe) = find_executable(file) {
