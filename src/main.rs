@@ -11,10 +11,15 @@ fn main() {
             .read_line(&mut input)
             .expect("Failed to read line");
 
-        let command = input.trim();
+        let mut parts = input.trim().split_whitespace();
+        let command = parts.next().unwrap();
+        let args = parts;
 
         match command {
             "exit" => return,
+            "echo" => {
+                println!("{}", args.collect::<Vec<_>>().join(" "));
+            }
             _ => {
                 eprintln!("{command}: command not found");
             }
