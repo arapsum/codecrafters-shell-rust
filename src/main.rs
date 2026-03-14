@@ -1,6 +1,8 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
 
+const BUILTINS: &[&str] = &["exit", "echo", "type"];
+
 fn main() {
     loop {
         print!("$ ");
@@ -21,13 +23,14 @@ fn main() {
                 println!("{}", args.join(" "));
             }
             "type" => {
-                let arg: Result<BuiltInCommand, ()> = args[0].try_into();
-                match arg {
-                    Ok(arg) => {
-                        println!("{} is a shell builtin", arg.as_str());
-                    }
-                    Err(_) => {
-                        eprintln!("{}: not found", args[0]);
+                if args.is_empty() {
+                    eprintln!("type: missing operand");
+                } else {
+                    let arg = args[0];
+                    if BUILTINS.contains(&arg) {
+                        println!("{} is a shell builtin", arg);
+                    } else {
+                        eprintln!("{}: not found", arg);
                     }
                 }
             }
@@ -39,31 +42,20 @@ fn main() {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum BuiltInCommand {
+pub enum ShellCommand {
     Exit,
-    Echo,
-    Type,
+    Echo(String),
+    Type(String),
+    NotFound,
 }
 
-impl BuiltInCommand {
+impl ShellCommand {
     pub fn as_str(&self) -> &str {
         match self {
-            BuiltInCommand::Exit => "exit",
-            BuiltInCommand::Echo => "echo",
-            BuiltInCommand::Type => "type",
-        }
-    }
-}
-
-impl TryFrom<&str> for BuiltInCommand {
-    type Error = ();
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "exit" => Ok(BuiltInCommand::Exit),
-            "echo" => Ok(BuiltInCommand::Echo),
-            "type" => Ok(BuiltInCommand::Type),
-            _ => Err(()),
+            Self::Exit => "exit",
+            Self::Echo(_) => "echo",
+            Self::Type(_) => "type",
+            Self::NotFound => "not found",
         }
     }
 }
