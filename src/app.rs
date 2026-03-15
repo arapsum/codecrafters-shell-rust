@@ -5,6 +5,7 @@ use std::{
 
 use crate::commands::{self, Command};
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct App {
     cwd: PathBuf,
@@ -33,6 +34,11 @@ impl App {
                 Command::Type(cmd_type) => println!("{cmd_type}"),
                 Command::Unkown(err) => eprintln!("{err}"),
                 Command::Pwd(pwd) => println!("{pwd}"),
+                Command::Cd(path) => {
+                    if let Err(_) = std::env::set_current_dir(&path) {
+                        eprintln!("{}: No such file or directory", path.display());
+                    }
+                }
                 Command::Programme(_path, name, args) => {
                     match std::process::Command::new(name.to_string())
                         .args(args)

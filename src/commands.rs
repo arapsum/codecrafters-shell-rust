@@ -6,9 +6,10 @@ use std::{
 
 use crate::commands;
 
-const BUILTINS: &[&str] = &["exit", "echo", "type", "pwd"];
+const BUILTINS: &[&str] = &["exit", "echo", "type", "pwd", "cd"];
 
 pub enum Command<'a> {
+    Cd(PathBuf),
     Exit(Option<i32>),
     Echo(Cow<'a, str>),
     Type(Cow<'a, str>),
@@ -41,6 +42,13 @@ pub fn parse_command(input: &str) -> Command<'_> {
             } else {
                 Command::Unkown(Cow::Owned(format!("{cmd_name} not found")))
             }
+        }
+        "cd" => {
+            let dir = args.next().map_or_else(
+                || std::env::home_dir().unwrap(),
+                |target| PathBuf::from(target),
+            );
+            Command::Cd(dir)
         }
         _ => {
             if let Some(executable) = commands::find_executable(cmd) {
