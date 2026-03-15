@@ -44,10 +44,16 @@ pub fn parse_command(input: &str) -> Command<'_> {
             }
         }
         "cd" => {
-            let dir = args.next().map_or_else(
-                || std::env::home_dir().unwrap(),
-                |target| PathBuf::from(target),
-            );
+            let target = args.next().unwrap_or("~");
+
+            let dir = if target.starts_with("~") {
+                let home = std::env::home_dir().unwrap();
+                let rest = target.trim_start_matches("~").trim_start_matches("/");
+                home.join(rest)
+            } else {
+                PathBuf::from(target)
+            };
+
             Command::Cd(dir)
         }
         _ => {
