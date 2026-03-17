@@ -1,7 +1,6 @@
 use std::{
     borrow::Cow,
     path::{Path, PathBuf},
-    str::SplitWhitespace,
 };
 
 use crate::commands;
@@ -14,18 +13,27 @@ pub enum Command<'a> {
     Echo(Cow<'a, str>),
     Type(Cow<'a, str>),
     Pwd(Cow<'a, str>),
-    Programme(PathBuf, Cow<'a, str>, SplitWhitespace<'a>),
+    Programme(PathBuf, Cow<'a, str>, Vec<String>),
     Unkown(Cow<'a, str>),
 }
 
 pub fn parse_command(input: &str) -> Command<'_> {
-    let mut parts = input.trim().split_whitespace();
-    let cmd = parts.next().unwrap_or("");
+    let input = input.trim();
+    let mut parts = input.split_whitespace();
+
+    let cmd = parts.next().unwrap();
+
     let mut args = parts;
 
     match cmd {
         "exit" => Command::Exit(args.next().map(|code| code.parse::<i32>().unwrap_or(0))),
-        "echo" => Command::Echo(Cow::Owned(args.collect::<Vec<&str>>().join(" "))),
+        "echo" => {
+            let tokens = tokeniser(input);
+
+            let args: Vec<&str> = tokens.iter().skip(1).map(|s| s.as_str()).collect();
+
+            Command::Echo(Cow::Owned(args.join(" ")))
+        }
         "pwd" => Command::Pwd(Cow::Owned(
             std::env::current_dir()
                 .unwrap_or_default()
@@ -58,12 +66,44 @@ pub fn parse_command(input: &str) -> Command<'_> {
         }
         _ => {
             if let Some(executable) = commands::find_executable(cmd) {
-                Command::Programme(executable, Cow::Owned(cmd.to_string()), args)
+                let tokens = tokeniser(input);
+                Command::Programme(
+                    executable,
+                    Cow::Owned(cmd.to_string()),
+                    tokens.into_iter().skip(1).collect(),
+                )
             } else {
                 Command::Unkown(Cow::Owned(format!("{cmd}: not found")))
             }
         }
     }
+}
+
+fn tokeniser(input: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+
+    for c in input.chars() {
+        match c {
+            '\'' => {
+                in_quotes = !in_quotes;
+            }
+            ' ' if !in_quotes => {
+                if !current.is_empty() {
+                    tokens.push(current.clone());
+                    current.clear();
+                }
+            }
+            _ => current.push(c),
+        }
+    }
+
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    tokens
 }
 
 fn is_builtin(command: &str) -> bool {

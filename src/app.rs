@@ -35,7 +35,7 @@ impl App {
                 Command::Unkown(err) => eprintln!("{err}"),
                 Command::Pwd(pwd) => println!("{pwd}"),
                 Command::Cd(path) => {
-                    if let Err(_) = std::env::set_current_dir(&path) {
+                    if std::env::set_current_dir(&path).is_err() {
                         eprintln!("{}: No such file or directory", path.display());
                     }
                 }
