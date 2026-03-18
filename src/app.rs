@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::commands::{self, Command};
+use crate::commands::{self, CommandType};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -28,32 +28,64 @@ impl App {
                 .read_line(&mut line)
                 .expect("Failed to read line");
 
+            if line.ends_with('\n') {
+                line.pop();
+
+                if line.ends_with('\r') {
+                    line.pop();
+                }
+            }
+
+            if line.is_empty() {
+                continue;
+            }
+
             match commands::parse_command(&line) {
-                Command::Exit(code) => std::process::exit(code.unwrap_or(0)),
-                Command::Echo(msg) => println!("{msg}"),
-                Command::Type(cmd_type) => println!("{cmd_type}"),
-                Command::Unkown(err) => eprintln!("{err}"),
-                Command::Pwd(pwd) => println!("{pwd}"),
-                Command::Cd(path) => {
-                    if std::env::set_current_dir(&path).is_err() {
-                        eprintln!("{}: No such file or directory", path.display());
+                CommandType::Cd(cmd) => {
+                    let mut target = cmd.args[0].as_str();
+                    if target.is_empty() {
+                        target = "~";
+                    }
+
+                    let dir = if target.starts_with("~") {
+                        let home = std::env::home_dir().unwrap();
+                        let rest = target.trim_start_matches("~").trim_start_matches("/");
+                        home.join(rest)
+                    } else {
+                        PathBuf::from(target)
+                    };
+
+                    if std::env::set_current_dir(&dir).is_err() {
+                        eprintln!("{}: No such file or directory", dir.display());
                     }
                 }
-                Command::Programme(_path, name, args) => {
-                    match std::process::Command::new(name.to_string())
-                        .args(args)
-                        .spawn()
-                    {
-                        Ok(mut child) => {
-                            let status = child.wait()?;
-                            anyhow::ensure!(
-                                status.success(),
-                                "Programme exited with non-zero status"
-                            );
+                CommandType::Echo(cmd) => println!("{}", cmd.args.join(" ")),
+                CommandType::Exit(code) => std::process::exit(code),
+                CommandType::Pwd(cmd) => {
+                    if let Some(path) = cmd.path {
+                        println!("{}", path.display());
+                    }
+                }
+                CommandType::Type(cmd) => {
+                    for arg in cmd.args {
+                        if commands::is_builtin(&arg) {
+                            println!("{} is a shell builtin", arg);
+                            continue;
                         }
-                        Err(err) => eprintln!("{err}"),
+
+                        if let Some(exe) = commands::find_executable(&arg) {
+                            if commands::is_executable(&exe) {
+                                println!("{} is {}", &arg, exe.display());
+                            } else {
+                                println!("{}: not found", arg)
+                            }
+                        } else {
+                            println!("{}: not found", arg)
+                        }
                     }
                 }
+                CommandType::Unkown(err) => eprintln!("{err}"),
+                CommandType::Programme(cmd) => cmd.run().unwrap(),
             }
         }
     }
