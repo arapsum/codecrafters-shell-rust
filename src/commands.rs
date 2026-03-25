@@ -1,4 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs::OpenOptions,
+    path::{Path, PathBuf},
+    process::Stdio,
+};
 
 use crate::commands;
 
@@ -20,11 +24,67 @@ impl Command {
         }
     }
 
-    pub fn run(&self) -> anyhow::Result<()> {
-        std::process::Command::new(&self.name)
-            .args(&self.args)
-            .spawn()?
-            .wait()?;
+    pub fn run(&self, redirects: &[Redirect]) -> anyhow::Result<()> {
+        let mut cmd = std::process::Command::new(&self.name);
+        cmd.args(&self.args);
+
+        for redirect in redirects {
+            let RedirectTarget::File(path) = &redirect.target;
+            let file = match redirect.kind {
+                RedirectKind::Stdout | RedirectKind::Stderr => OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(path)?,
+                RedirectKind::StdoutAppend | RedirectKind::StderrAppend => OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(true)
+                    .open(path)?,
+            };
+
+            match redirect.kind {
+                RedirectKind::Stdout | RedirectKind::StdoutAppend => {
+                    cmd.stdout(Stdio::from(file));
+                }
+                RedirectKind::Stderr | RedirectKind::StderrAppend => {
+                    cmd.stderr(Stdio::from(file));
+                }
+            }
+        }
+
+        cmd.spawn()?.wait()?;
+        Ok(())
+    }
+
+    pub fn run_with_redirects(&self, redirects: &[Redirect]) -> anyhow::Result<()> {
+        let mut cmd = std::process::Command::new(&self.name);
+        cmd.args(&self.args);
+
+        for redirect in redirects {
+            let RedirectTarget::File(path) = &redirect.target;
+            let file = match redirect.kind {
+                RedirectKind::Stdout | RedirectKind::Stderr => OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(path)?,
+                RedirectKind::StdoutAppend | RedirectKind::StderrAppend => {
+                    OpenOptions::new().create(true).append(true).open(path)?
+                }
+            };
+
+            match redirect.kind {
+                RedirectKind::Stdout | RedirectKind::StdoutAppend => {
+                    cmd.stdout(Stdio::from(file));
+                }
+                RedirectKind::Stderr | RedirectKind::StderrAppend => {
+                    cmd.stderr(Stdio::from(file));
+                }
+            }
+        }
+
+        cmd.spawn()?.wait()?;
         Ok(())
     }
 }
@@ -39,11 +99,10 @@ pub enum CommandType {
     Unkown(String),
 }
 
-pub fn parse_command(input: &str) -> CommandType {
-    let words = shell_words::split(input).unwrap();
+pub fn parse_command(tokens: Vec<String>) -> CommandType {
+    let cmd = &tokens[0];
+    let args: Vec<String> = tokens[1..].iter().map(ToString::to_string).collect();
 
-    let cmd = &words[0];
-    let args: Vec<String> = words[1..].iter().map(ToString::to_string).collect();
     match cmd.as_str() {
         "cd" => CommandType::Cd(Command::new(cmd, None, args)),
         "echo" => CommandType::Echo(Command::new(cmd, None, args)),
@@ -70,6 +129,25 @@ pub fn parse_command(input: &str) -> CommandType {
             }
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum RedirectTarget {
+    File(PathBuf),
+}
+
+#[derive(Debug, Clone)]
+pub struct Redirect {
+    pub kind: RedirectKind,
+    pub target: RedirectTarget,
+}
+
+#[derive(Debug, Clone)]
+pub enum RedirectKind {
+    Stdout,       // > or 1>
+    StdoutAppend, // >> or  1>>
+    Stderr,       // 2>
+    StderrAppend, // 2>>
 }
 
 // fn tokeniser(input: &str) -> Vec<String> {
